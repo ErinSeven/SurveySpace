@@ -137,7 +137,7 @@
     </div>
   </div>
   <!-- SoSci Survey 问卷 -->
-  <iframe class="sosci-iframe" src="https://www.soscisurvey.de/TestWithsurvey/?q=Test"></iframe>
+  <iframe class="sosci-iframe" src="https://www.soscisurvey.de/TestWithsurvey/"></iframe>
 
   <script>
   // ===== A/B Group Assignment (50/50, sticky per visitor) =====
@@ -194,17 +194,22 @@
       // Keep header visible to preserve layout height (260px) for parity with experiment group
     }
 
-    // Send group to SoSci in two ways: URL param and postMessage (for logging)
+    // Send group to SoSci in two ways: set URL (q=Test/NoChatnot) and postMessage (for logging)
     const iframe = document.querySelector(".sosci-iframe");
     if (iframe) {
       try {
-        const url = new URL(iframe.src);
+        const baseHref = "https://www.soscisurvey.de/TestWithsurvey/";
+        const url = new URL(baseHref);
+        // When page has chatbot (exp): q=Test; when no chatbot (ctl): q=NoChatnot
+        url.searchParams.set("q", abGroup === "exp" ? "Test" : "NoChatnot");
         url.searchParams.set("abGroup", abGroup);
-        if (iframe.src !== url.toString()) {
-          iframe.src = url.toString();
+        const nextSrc = url.toString();
+        if (iframe.src !== nextSrc) {
+          iframe.src = nextSrc;
         }
+        console.log("🔗 SoSci iframe src set to:", nextSrc);
       } catch (e) {
-        console.warn("Could not set abGroup param on SoSci iframe:", e);
+        console.warn("Could not set q/abGroup params on SoSci iframe:", e);
       }
 
       iframe.addEventListener("load", function () {
