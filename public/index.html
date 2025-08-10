@@ -140,8 +140,103 @@
   <iframe class="sosci-iframe" src="https://www.soscisurvey.de/TestWithsurvey/?q=Test"></iframe>
 
   <script>
+  // ===== A/B Group Assignment (50/50, sticky per visitor) =====
+  (function () {
+    const STORAGE_KEY = "abGroup"; // "exp" or "ctl"
+
+    function readGroupFromUrl() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const g = params.get("abGroup");
+        if (g === "exp" || g === "ctl") return g;
+      } catch {}
+      return null;
+    }
+
+    function getOrAssignGroup() {
+      const urlGroup = readGroupFromUrl();
+      if (urlGroup) {
+        try { localStorage.setItem(STORAGE_KEY, urlGroup); } catch {}
+        return urlGroup;
+      }
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved === "exp" || saved === "ctl") return saved;
+      } catch {}
+      const assigned = Math.random() < 0.5 ? "exp" : "ctl";
+      try { localStorage.setItem(STORAGE_KEY, assigned); } catch {}
+      return assigned;
+    }
+
+    const abGroup = getOrAssignGroup();
+    window.__AB_GROUP__ = abGroup; // Expose for debugging
+
+    // UI rules per group
+    if (abGroup === "ctl") {
+      // Control group: hide Spline, show placeholder with same size and position, keep popup hidden
+      const chatPopup = document.getElementById("chatPopup");
+      if (chatPopup) chatPopup.style.display = "none";
+
+      const container = document.querySelector(".spline-chatbot");
+      const viewer = document.getElementById("splineBot");
+
+      if (viewer) viewer.style.display = "none";
+      if (container) {
+        const placeholder = document.createElement("div");
+        placeholder.setAttribute("id", "splinePlaceholder");
+        placeholder.style.width = "100%";
+        placeholder.style.height = "100%";
+        placeholder.style.background = "rgb(211, 210, 227)";
+        placeholder.style.borderRadius = "0";
+        placeholder.style.boxShadow = "none";
+        container.appendChild(placeholder);
+      }
+      // Keep header visible to preserve layout height (260px) for parity with experiment group
+    }
+
+    // Send group to SoSci in two ways: URL param and postMessage (for logging)
+    const iframe = document.querySelector(".sosci-iframe");
+    if (iframe) {
+      try {
+        const url = new URL(iframe.src);
+        url.searchParams.set("abGroup", abGroup);
+        if (iframe.src !== url.toString()) {
+          iframe.src = url.toString();
+        }
+      } catch (e) {
+        console.warn("Could not set abGroup param on SoSci iframe:", e);
+      }
+
+      iframe.addEventListener("load", function () {
+        try {
+          iframe.contentWindow.postMessage({ type: "abGroup", value: abGroup }, "*");
+          console.log("📤 Sent abGroup to SoSci:", abGroup);
+        } catch (e) {
+          console.warn("Could not postMessage abGroup to SoSci:", e);
+        }
+      });
+    }
+
+    console.log("🧪 A/B group:", abGroup === "exp" ? "experiment" : "control");
+  })();
+
+  function openChatPopup() {
+    const popup = document.getElementById('chatPopup');
+    if (!popup) return;
+    if (getComputedStyle(popup).display !== 'none') return; // already open
+    popup.style.display = 'flex';
+  }
+
+  function closeChatPopup() {
+    const popup = document.getElementById('chatPopup');
+    if (!popup) return;
+    popup.style.display = 'none';
+  }
+
+  
+
   document.getElementById('splineBot').addEventListener('click', function () {
-    document.getElementById('chatPopup').style.display = 'flex';
+    openChatPopup();
   });
 
 document.getElementById('splineBot').addEventListener('click', async function () {
@@ -150,7 +245,7 @@ document.getElementById('splineBot').addEventListener('click', async function ()
   await createThread();
   console.log("✅ New Thread created:", threadId);
 
-  document.getElementById('chatPopup').style.display = 'flex';
+  openChatPopup();
 });
 
 
@@ -430,15 +525,14 @@ async function sendWebhookToSpline() {
   }
 }
 
-// 绑定 Send 按钮
+// 绑定 Send 按钮（保留原有 Webhook，合并计数）
 const sendButton = document.getElementById('sendChat');
 sendButton.addEventListener('click', async () => {
   await sendWebhookToSpline();
-  // 其他发送逻辑...
 });
 
 document.getElementById('closeChat').addEventListener('click', function () {
-  document.getElementById('chatPopup').style.display = 'none';
+  closeChatPopup();
 });
 
 let robot = null;
@@ -577,8 +671,22 @@ function sendSplineWebhook(questionId) {
   }
 }
 
+const iframe = document.querySelector('.sosci-iframe');
+
+// 请求 iframe 发送 ABGROUP 值
+iframe.onload = function () {
+  iframe.contentWindow.postMessage("getABGroup", "*");
+};
+
+// 监听 iframe 返回
+window.addEventListener("message", function (event) {
+  if (event.data?.type === "abGroupValue") {
+    console.log("📩 Received ABGROUP from SoSci:", event.data.value);
+  }
+});
 
 </script>
+
 
 
 </body>
