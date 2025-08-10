@@ -119,7 +119,7 @@
     <div class="spline-chatbot">
       <spline-viewer 
       id="splineBot" 
-      url="https://prod.spline.design/xq1k2XGVHjfujodr/scene.splinecode"
+      url="https://prod.spline.design/TcP4CdVPfRiOUfmZ/scene.splinecode"
       onload="onSplineLoaded(event)">
     </spline-viewer>    
     </div>
@@ -249,7 +249,7 @@ window.addEventListener("message", async function(event) {
   const now = Date.now();
   console.log("✅ Parent received: nextClicked at", now);
 
-  if (now - lastClickTime < 12000) { // ✅ 判断间隔是否小于12秒
+  if (now - lastClickTime < 10000) { // ✅ 判断间隔是否小于10秒
     console.log("⚡ TooFast triggered! Sending Webhook to Spline...");
     await triggerTooFast();
   }
