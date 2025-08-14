@@ -11,13 +11,25 @@
       var isIPad = /iPad|Tablet/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
       var uaDataMobile = navigator.userAgentData && navigator.userAgentData.mobile === true;
       var isDesktop = !(isMobile || isIPad || uaDataMobile);
+      window.__IS_DESKTOP__ = isDesktop;
       if (!isDesktop) {
-        document.write(
-          '<!DOCTYPE html><meta charset="utf-8">' +
-          '<style>body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:system-ui,-apple-system,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;color:#222}</style>' +
-          '<body>For the best viewing and interaction experience, please complete this survey on a desktop or laptop computer Thank you for your understanding.</body>'
-        );
-        document.close();
+        var style = document.createElement('style');
+        style.textContent = 'html,body{height:100%} body{margin:0;background:#fff} .__blocked__overlay{position:fixed;inset:0;background:#fff;display:flex;align-items:center;justify-content:center;padding:24px;text-align:center;font-family:system-ui,-apple-system,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;color:#222;z-index:2147483647}';
+        document.head.appendChild(style);
+
+        function showOverlay() {
+          var overlay = document.createElement('div');
+          overlay.className = '__blocked__overlay';
+          overlay.textContent = 'For the best viewing and interaction experience, please complete this survey on a desktop or laptop computer Thank you for your understanding.';
+          document.body.appendChild(overlay);
+          if (window.stop) { try { window.stop(); } catch (e) {} }
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', showOverlay);
+        } else {
+          showOverlay();
+        }
       }
     } catch (e) {
       // 如果检测失败，默认继续加载（以避免误伤桌面端）
@@ -133,7 +145,14 @@
       }
     }
   </style>
-  <script type="module" src="https://unpkg.com/@splinetool/viewer@1.10.44/build/spline-viewer.js"></script>
+  <script>
+    if (window.__IS_DESKTOP__) {
+      var splineScript = document.createElement('script');
+      splineScript.type = 'module';
+      splineScript.src = 'https://unpkg.com/@splinetool/viewer@1.10.44/build/spline-viewer.js';
+      document.head.appendChild(splineScript);
+    }
+  </script>
 </head>
 <body>
   <div class="header">
@@ -158,9 +177,10 @@
     </div>
   </div>
   <!-- SoSci Survey 问卷 -->
-  <iframe class="sosci-iframe" src="https://www.soscisurvey.de/TestWithsurvey/"></iframe>
+  <iframe class="sosci-iframe"></iframe>
 
   <script>
+  if (window.__IS_DESKTOP__) {
   // ===== A/B Group Assignment (50/50, sticky per visitor) =====
   (function () {
     const STORAGE_KEY = "abGroup"; // "exp" or "ctl"
@@ -710,7 +730,7 @@ window.addEventListener("message", function (event) {
     console.log("📩 Received ABGROUP from SoSci:", event.data.value);
   }
 });
-
+  }
 </script>
 
 
