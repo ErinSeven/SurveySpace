@@ -188,8 +188,13 @@
     function readGroupFromUrl() {
       try {
         const params = new URLSearchParams(window.location.search);
-        const g = params.get("abGroup");
-        if (g === "exp" || g === "ctl") return g;
+        // Prefer abGroup, but also accept legacy/alternate param ab
+        let g = params.get("abGroup");
+        if (!g) g = params.get("ab");
+        if (!g) return null;
+        g = String(g).trim().toLowerCase();
+        if (g === "exp") return "exp";
+        if (g === "ctl") return "ctl";
       } catch {}
       return null;
     }
@@ -243,7 +248,9 @@
         const url = new URL(baseHref);
         // When page has chatbot (exp): q=Test; when no chatbot (ctl): q=NoChatnot
         url.searchParams.set("q", abGroup === "exp" ? "Test" : "NoChatnot");
+        // Send group redundantly via both abGroup and ab for compatibility with SoSci PHP
         url.searchParams.set("abGroup", abGroup);
+        url.searchParams.set("ab", abGroup); // using exp/ctl values
         const nextSrc = url.toString();
         if (iframe.src !== nextSrc) {
           iframe.src = nextSrc;
@@ -440,7 +447,7 @@ const OPENAI_PROXY_URL = "https://chatbotsurvey.yuqing.wang"
 
 let threadId = null;        
 let questionCount = 0;      
-const MAX_QUESTIONS = 20;   // Limit to 20 questions
+  const MAX_QUESTIONS = 100;   // Limit to 100 questions
 
 // ✅ Create Thread (only once)
 async function createThread() {
@@ -462,7 +469,7 @@ async function sendMessageToAssistant(userMessage) {
 
   // ✅ Limit check
   if (questionCount > MAX_QUESTIONS) {
-    return "⚠️ You have reached the maximum of 20 questions. Please continue with the survey.";
+    return `⚠️ You have reached the maximum of ${MAX_QUESTIONS} questions. Please continue with the survey.`;
   }
 
   // 1. Add user message
