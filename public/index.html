@@ -68,6 +68,17 @@
       border: none;
       display: block;
     }
+    .iframe-overlay {
+      position: fixed;
+      left: 0;
+      top: 260px; /* match header height */
+      width: 100vw;
+      height: calc(100vh - 260px);
+      background: rgba(211, 211, 230, 0.5); /* #D3D3E6 at 50% */
+      z-index: 1500; /* below chat popup (2000), above iframe */
+      pointer-events: auto; /* intercept clicks */
+      display: none; /* shown only when popup is open */
+    }
     .chat-popup {
       position: fixed;
       left: 50%;
@@ -178,6 +189,8 @@
   </div>
   <!-- SoSci Survey 问卷 -->
   <iframe class="sosci-iframe"></iframe>
+  <!-- Overlay to block iframe interactions when chat popup is open -->
+  <div id="iframeOverlay" class="iframe-overlay" aria-hidden="true"></div>
 
   <script>
   if (window.__IS_DESKTOP__) {
@@ -273,17 +286,107 @@
     console.log("🧪 A/B group:", abGroup === "exp" ? "experiment" : "control");
   })();
 
+  // ===== Metrics for popup usage =====
+  const popupMetrics = {
+    openCount: 0,
+    sendCount: 0,
+    sendByClickCount: 0,
+    sendByEnterCount: 0,
+    totalOpenDurationMs: 0,
+    lastOpenAtMs: null
+  };
+
+  function getSosciIframeWindow() {
+    const el = document.querySelector('.sosci-iframe');
+    return el && el.contentWindow ? el.contentWindow : null;
+  }
+
+  function postMetricsToSosci(eventType, extra = {}) {
+    try {
+      const target = getSosciIframeWindow();
+      if (!target) {
+        console.warn('postMetricsToSosci: sosci iframe not ready');
+        return;
+      }
+      const payload = {
+        type: eventType,
+        metrics: {
+          openCount: popupMetrics.openCount,
+          sendCount: popupMetrics.sendCount,
+          sendByClickCount: popupMetrics.sendByClickCount,
+          sendByEnterCount: popupMetrics.sendByEnterCount,
+          totalOpenDurationMs: popupMetrics.totalOpenDurationMs
+        },
+        ...extra
+      };
+      console.log('📤 Metrics to SoSci:', payload);
+      target.postMessage(payload, '*');
+    } catch (e) {
+      console.warn('Could not post metrics to SoSci:', e);
+    }
+  }
+
+  // Expose quick debug helpers
+  window.debugPopupMetrics = function() {
+    console.log('🧪 popupMetrics snapshot:', JSON.parse(JSON.stringify(popupMetrics)));
+    return popupMetrics;
+  };
+
+  window.sendSosciDebugPing = function() {
+    const target = getSosciIframeWindow();
+    if (!target) {
+      console.warn('sendSosciDebugPing: sosci iframe not ready');
+      return false;
+    }
+    const payload = { type: 'debugFromParent', now: Date.now() };
+    console.log('📤 Debug ping to SoSci:', payload);
+    target.postMessage(payload, '*');
+    return true;
+  };
+
+  function trackPopupOpen() {
+    popupMetrics.openCount += 1;
+    popupMetrics.lastOpenAtMs = Date.now();
+    postMetricsToSosci('popupOpen');
+  }
+
+  function trackPopupClose() {
+    if (popupMetrics.lastOpenAtMs) {
+      const durationMs = Date.now() - popupMetrics.lastOpenAtMs;
+      popupMetrics.totalOpenDurationMs += durationMs;
+      popupMetrics.lastOpenAtMs = null;
+      postMetricsToSosci('popupClose', { durationMs });
+    } else {
+      postMetricsToSosci('popupClose');
+    }
+  }
+
+  function trackPopupSend(method) {
+    popupMetrics.sendCount += 1;
+    if (method === 'click') popupMetrics.sendByClickCount += 1;
+    if (method === 'enter') popupMetrics.sendByEnterCount += 1;
+    postMetricsToSosci('popupSend', { method });
+  }
+
   function openChatPopup() {
     const popup = document.getElementById('chatPopup');
     if (!popup) return;
     if (getComputedStyle(popup).display !== 'none') return; // already open
     popup.style.display = 'flex';
+    const iframeOverlay = document.getElementById('iframeOverlay');
+    if (iframeOverlay) iframeOverlay.style.display = 'block';
+    // Metrics: track open
+    trackPopupOpen();
   }
 
   function closeChatPopup() {
     const popup = document.getElementById('chatPopup');
     if (!popup) return;
     popup.style.display = 'none';
+    const iframeOverlay = document.getElementById('iframeOverlay');
+    if (iframeOverlay) iframeOverlay.style.display = 'none';
+    // Metrics: track close + duration
+    trackPopupClose();
   }
 
   
@@ -529,6 +632,8 @@ document.getElementById("sendChat").addEventListener("click", async () => {
   chatBox.innerHTML += `<div><b>🤖 Bot:</b> ${reply}</div>`;
 
   chatBox.scrollTop = chatBox.scrollHeight;
+  // Metrics: track send by click
+  trackPopupSend('click');
 });
 
 
@@ -537,6 +642,8 @@ document.getElementById("chatInput").addEventListener("keydown", async (event) =
   if (event.key === "Enter" && !event.shiftKey) { 
     event.preventDefault();  // Prevent adding a new line
     await handleSendMessage();
+    // Metrics: track send by enter
+    trackPopupSend('enter');
   }
 });
 
